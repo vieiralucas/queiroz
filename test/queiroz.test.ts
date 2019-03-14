@@ -1,11 +1,6 @@
-import {describe, IT, Assertions} from '../src/queiroz';
+import {describe} from '../src/queiroz';
 
-describe('yet another test runner', (it: IT) => {
-  it.should('work', (assert: Assertions) => {
-    return assert.ok(true);
-  });
-
-  it.should('fail', (assert: Assertions) => {
-    return assert.ok(false);
-  });
-});
+describe('yet another test runner')
+  .it('should work', assert => assert.ok(true))
+  .it('should fail', assert => assert.ok(false))
+  .run();
