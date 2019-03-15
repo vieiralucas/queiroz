@@ -1,6 +1,6 @@
+import * as chalk from 'chalk';
 import {log} from 'fp-ts/lib/Console';
 import {array, empty} from 'fp-ts/lib/Array';
-import {IO, io} from 'fp-ts/lib/IO';
 import {Option} from 'fp-ts/lib/Option';
 import * as assert from 'safe-assert';
 import {Assertions, AssertionError} from 'safe-assert';
@@ -9,15 +9,12 @@ export {Assertions, AssertionError} from 'safe-assert';
 
 type TestBlock = (assert: Assertions) => Option<AssertionError>;
 
+const {red, green} = chalk.default;
+
 type TestResult = {
   message: string;
   error: Option<AssertionError>;
 };
-const processTestResult = (tr: TestResult): IO<void> =>
-  tr.error.fold(log(tr.message), err =>
-    log(tr.message).chain(_ => log(err.message)),
-  );
-
 class TestCase {
   constructor(
     private readonly message: string,
@@ -31,6 +28,13 @@ class TestCase {
     };
   }
 }
+
+const processAssertionError = (err: AssertionError): string =>
+  [
+    // FIXME: JSON.stringify is dangerous, may crash on cyclic data
+    `  Expected: ${green(JSON.stringify(err.expected))}`,
+    `  Actual: ${red(JSON.stringify(err.actual))}`,
+  ].join('\n');
 
 class Describer {
   constructor(
@@ -46,13 +50,32 @@ class Describer {
   }
 
   run() {
-    log(this.description)
-      .chain(_ =>
-        array.sequence(io)(
-          this.tests.map(test => processTestResult(test.run())),
-        ),
+    const trs = this.tests.map(test => test.run());
+
+    const testCasesMessage = trs
+      .map(tr => {
+        const message = tr.error.fold(
+          `  ${green('✓')} ${tr.message}`,
+          err => `  ${red('✕')} ${tr.message}`,
+        );
+
+        return message;
+      })
+      .join('\n');
+
+    const failureMessage = array
+      .filterMap(trs, tr =>
+        tr.error.map(error => ({error, message: tr.message})),
       )
-      .run();
+      .map(
+        ({message, error}) =>
+          `${red('●')} ${red(message)}\n\n${processAssertionError(error)}`,
+      )
+      .join('\n');
+
+    log(
+      `${this.description}\n${testCasesMessage}\n\n${failureMessage}`.trim(),
+    ).run();
   }
 }
 
