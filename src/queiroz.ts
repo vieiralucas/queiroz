@@ -1,19 +1,19 @@
 import * as chalk from 'chalk';
 import {log} from 'fp-ts/lib/Console';
 import {array, empty} from 'fp-ts/lib/Array';
-import {Option} from 'fp-ts/lib/Option';
-import * as assert from 'safe-assert';
-import {Assertions, AssertionError} from 'safe-assert';
+import {some, none} from 'fp-ts/lib/Option';
+import {Assert} from './assert';
+import {AssertionError} from 'safe-assert';
 
 export {Assertions, AssertionError} from 'safe-assert';
 
-type TestBlock = (assert: Assertions) => Option<AssertionError>;
+type TestBlock = (assert: Assert) => void;
 
 const {red, green} = chalk.default;
 
 type TestResult = {
   message: string;
-  error: Option<AssertionError>;
+  assert: Assert;
 };
 class TestCase {
   constructor(
@@ -22,9 +22,12 @@ class TestCase {
   ) {}
 
   run(): TestResult {
+    const assert = new Assert();
+    this.block(assert);
+
     return {
+      assert,
       message: this.message,
-      error: this.block(assert),
     };
   }
 }
@@ -54,22 +57,31 @@ class Describer {
 
     const testCasesMessage = trs
       .map(tr => {
-        const message = tr.error.fold(
-          `  ${green('✓')} ${tr.message}`,
-          err => `  ${red('✕')} ${tr.message}`,
-        );
+        if (tr.assert.errors.length > 0) {
+          return `  ${red('✕')} ${tr.message}`;
+        }
 
-        return message;
+        return `  ${green('✓')} ${tr.message}`;
       })
       .join('\n');
 
     const failureMessage = array
-      .filterMap(trs, tr =>
-        tr.error.map(error => ({error, message: tr.message})),
-      )
-      .map(
-        ({message, error}) =>
-          `${red('●')} ${red(message)}\n\n${processAssertionError(error)}`,
+      .filterMap(trs, tr => {
+        if (tr.assert.errors.length > 0) {
+          return some(tr);
+        }
+
+        return none;
+      })
+      .map(({message, assert}) =>
+        assert.errors
+          .map(
+            error =>
+              `${red('●')} ${red(message)}\n\n${processAssertionError(
+                error,
+              )}\n`,
+          )
+          .join('\n'),
       )
       .join('\n');
 
